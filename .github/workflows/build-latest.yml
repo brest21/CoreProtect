@@ -2,57 +2,65 @@ name: Auto Build & Release Latest CoreProtect
 
 on:
   schedule:
-    - cron: "0 6 * * *"   # every day at 6 AM UTC
-  workflow_dispatch:       # allows manual trigger
+    - cron: "0 6 * * *"  # every day at 6 AM UTC
+  workflow_dispatch:      # allow manual trigger
 
 jobs:
-  update-build-release:
+  build-and-release:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout your fork
+      # 1️⃣ Checkout your fork
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          persist-credentials: false
           fetch-depth: 0
 
-      - name: Pull latest changes from upstream
+      # 2️⃣ Pull latest changes from upstream
+      - name: Pull latest CoreProtect source
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git remote add upstream https://github.com/PlayPro/CoreProtect.git
+          git remote add upstream https://github.com/PlayPro/CoreProtect.git || true
           git fetch upstream
           git merge upstream/master --no-edit --allow-unrelated-histories || true
 
+      # 3️⃣ Set up Java 21
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '21'
+          distribution: temurin
+          java-version: 21
 
-      - name: Clean Maven cache (optional but safe)
+      # 4️⃣ Verify Java version (optional but helps debug)
+      - name: Verify Java version
+        run: java -version && javac -version
+
+      # 5️⃣ Clean old Paper API artifacts
+      - name: Clean Paper API cache
         run: rm -rf ~/.m2/repository/io/papermc
 
-      - name: Build with Maven
+      # 6️⃣ Build with Maven
+      - name: Build CoreProtect
         run: mvn -U -B -DskipTests clean package
 
-      - name: Get short commit hash and date
+      # 7️⃣ Get commit hash and date for release naming
+      - name: Get build info
         id: vars
         run: |
           echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
           echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
+      # 8️⃣ Create a GitHub Release
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: nightly-${{ steps.vars.outputs.date }}-${{ steps.vars.outputs.sha_short }}
           name: CoreProtect Nightly Build – ${{ steps.vars.outputs.date }}
           body: |
-            🏗️ **Automatic nightly build** from [PlayPro/CoreProtect](https://github.com/PlayPro/CoreProtect)
+            🏗️ Automatic nightly build of CoreProtect
             - Commit: `${{ steps.vars.outputs.sha_short }}`
             - Build date: `${{ steps.vars.outputs.date }}`
-
-            This is an *unofficial* automated build generated via GitHub Actions.
           files: target/*.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
