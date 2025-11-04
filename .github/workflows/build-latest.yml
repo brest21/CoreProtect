@@ -3,7 +3,7 @@ name: Auto Build & Release Latest CoreProtect
 on:
   schedule:
     - cron: "0 6 * * *"   # every day at 6 AM UTC
-  workflow_dispatch:       # allow manual trigger
+  workflow_dispatch:       # allows manual trigger
 
 jobs:
   update-build-release:
@@ -22,27 +22,37 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote add upstream https://github.com/PlayPro/CoreProtect.git
           git fetch upstream
-          git merge upstream/master --no-edit || true
+          git merge upstream/master --no-edit --allow-unrelated-histories || true
 
-      - name: Set up JDK 11
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '11'
+          java-version: '21'
+
+      - name: Clean Maven cache (optional but safe)
+        run: rm -rf ~/.m2/repository/io/papermc
 
       - name: Build with Maven
-        run: mvn -B -DskipTests clean package
+        run: mvn -U -B -DskipTests clean package
 
-      - name: Get short commit hash
+      - name: Get short commit hash and date
         id: vars
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: nightly-${{ steps.vars.outputs.sha_short }}
-          name: Nightly Build ${{ steps.vars.outputs.sha_short }}
-          body: "Automatically built from the latest commit on PlayPro/CoreProtect.\nCommit: ${{ steps.vars.outputs.sha_short }}"
+          tag_name: nightly-${{ steps.vars.outputs.date }}-${{ steps.vars.outputs.sha_short }}
+          name: CoreProtect Nightly Build – ${{ steps.vars.outputs.date }}
+          body: |
+            🏗️ **Automatic nightly build** from [PlayPro/CoreProtect](https://github.com/PlayPro/CoreProtect)
+            - Commit: `${{ steps.vars.outputs.sha_short }}`
+            - Build date: `${{ steps.vars.outputs.date }}`
+
+            This is an *unofficial* automated build generated via GitHub Actions.
           files: target/*.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
