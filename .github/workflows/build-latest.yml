@@ -1,0 +1,48 @@
+name: Auto Build & Release Latest CoreProtect
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # every day at 6 AM UTC
+  workflow_dispatch:       # allow manual trigger
+
+jobs:
+  update-build-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout your fork
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Pull latest changes from upstream
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/PlayPro/CoreProtect.git
+          git fetch upstream
+          git merge upstream/master --no-edit || true
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+
+      - name: Build with Maven
+        run: mvn -B -DskipTests clean package
+
+      - name: Get short commit hash
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly-${{ steps.vars.outputs.sha_short }}
+          name: Nightly Build ${{ steps.vars.outputs.sha_short }}
+          body: "Automatically built from the latest commit on PlayPro/CoreProtect.\nCommit: ${{ steps.vars.outputs.sha_short }}"
+          files: target/*.jar
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
